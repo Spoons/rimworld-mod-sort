@@ -14,11 +14,13 @@ class Mod:
         before: Optional[list[str]],
         after: Optional[list[str]],
         incompatible: Optional[list[str]],
+        path: Optional[str]
     ):
         self.packageid = packageid
         self.before = before
         self.after = after
         self.incompatible = incompatible
+        self.path = path
 
     @staticmethod
     def create_from_path(dirpath) -> Optional[Mod]:
@@ -27,21 +29,28 @@ class Mod:
             root = tree.getroot()
 
             try:
-                packageid = root.find("packageId").text
+                packageid = cast(str, cast(ET.Element, root.find("packageId")).text)
             except AttributeError:
                 return None
 
-            def xml_list_grab(element: str):
+            def xml_list_grab(element: str) -> Optional[list[str]]:
                 try:
-                    return [n.text for n in root.find(element).findall("li")]
+                    return cast(
+                        Optional[list[str]],
+                        [
+                            n.text
+                            for n in cast(ET.Element, root.find(element)).findall("li")
+                        ],
+                    )
                 except AttributeError:
                     return None
 
             return Mod(
-                cast(str, packageid),
-                cast(Optional[list[str]], xml_list_grab("loadAfter")),
-                cast(Optional[list[str]], xml_list_grab("loadBefore")),
-                cast(Optional[list[str]], xml_list_grab("incompatibleWith")),
+                packageid,
+                xml_list_grab("loadAfter"),
+                xml_list_grab("loadBefore"),
+                xml_list_grab("incompatibleWith"),
+                dirpath,
             )
 
         except FileNotFoundError as e:
@@ -75,13 +84,17 @@ class ModFolderReader:
             )
         )
 
+
 class Edge:
     def __init__(self, vertex, child):
         self.parent = vertex
         self.child = child
 
+
 if __name__ == "__main__":
-    mods = (ModFolderReader.create_mods_list(os.path.expanduser("~/apps/rimworld/game/Mods")))
+    mods = ModFolderReader.create_mods_list(
+        os.path.expanduser("~/apps/rimworld/game/Mods")
+    )
     DG = nx.DiGraph()
 
     for m in mods:
@@ -95,7 +108,9 @@ if __name__ == "__main__":
                     DG.add_edge(m.packageid, b)
 
     pos = nx.spring_layout(DG, seed=56327, k=0.8, iterations=15)
-    nx.draw(DG,pos, node_size=100, alpha=0.8, edge_color="r", font_size=8, with_labels=True)
+    nx.draw(
+        DG, pos, node_size=100, alpha=0.8, edge_color="r", font_size=8, with_labels=True
+    )
     ax = plt.gca()
     ax.margins(0.08)
     plt.show()
